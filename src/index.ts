@@ -8,10 +8,6 @@ import { printJson } from './printers/json';
 import { notifySlack } from './printers/slack';
 import { printPlainText } from './printers/text';
 
-// Suppress the maintenance mode message from the AWS SDK
-// FIXME: Upgrade to aws-sdk v3 adn remove this
-process.env.AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE = '1';
-
 const program = new Command();
 
 program

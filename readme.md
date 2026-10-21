@@ -180,6 +180,57 @@ You will get the message on slack with the breakdown:
 
 You can set up a GitHub [workflow similar to this](https://github.com/kamranahmedse/developer-roadmap/blob/c1a53cf3cc5c9b77634673754c8a5af4e83466d6/.github/workflows/aws-costs.yml#L1) which can send the daily cost breakdown to Slack.
 
+## Run on AWS Lambda (scheduled Slack reports)
+
+The same cost analysis can run as a Lambda function on a schedule and post to Slack. Two reports:
+
+- **Daily** (default: every day 09:00): yesterday, last 7 days, this month and last month, plus a per-service breakdown for yesterday.
+- **Monthly** (default: 1st of each month 09:00): a full plain-text report for the month that just ended. It covers the total, the change vs the month before, daily average, most and least expensive days, cost per service with change and share, the biggest changes, and the cost of every day. Long reports are split into several Slack messages.
+
+**Daily report in Slack**
+
+![Daily Slack Report](./.github/images/lambda-daily-slack.png)
+
+**Monthly report in Slack**
+
+![Monthly Slack Report](./.github/images/lambda-monthly-slack.png)
+
+### Deploy
+
+You need Node.js, `zip`, and the AWS CLI logged in to the account you want to report on.
+
+```bash
+SLACK_TOKEN=xoxb-your-bot-token \
+SLACK_CHANNEL='#aws-costs' \
+SCHEDULE_TIMEZONE=Asia/Kolkata \
+./deploy.sh
+```
+
+All settings sit at the top of `deploy.sh` and can be passed as environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DAILY_SCHEDULE` | `cron(0 9 * * ? *)` | When the daily report runs |
+| `MONTHLY_SCHEDULE` | `cron(0 9 1 * ? *)` | When the monthly report runs (reports the previous month) |
+| `SCHEDULE_TIMEZONE` | `UTC` | Timezone for both schedules |
+| `SLACK_TOKEN` / `SLACK_CHANNEL` | | Bot token with `chat:write` scope and the channel (invite the bot to it) |
+| `SLACK_WEBHOOK_URL` | | Incoming webhook, instead of token + channel |
+| `ACCOUNT_NAME` | account alias | Label shown in the reports |
+| `SUMMARY_ONLY` | `false` | Daily report without the service breakdown |
+
+Schedule format is EventBridge Scheduler's `cron(minutes hours day-of-month month day-of-week year)`; `rate(12 hours)` also works. To change a schedule later, run `./deploy.sh` again with new values. You can also deploy `template.yaml` with `sam deploy --guided` instead.
+
+### Run it by hand
+
+```bash
+aws lambda invoke --function-name <function> --cli-binary-format raw-in-base64-out \
+  --payload '{"reportType":"monthly","month":"2026-09"}' /dev/stdout
+```
+
+Event fields: `reportType` (`daily` or `monthly`), `month` (`YYYY-MM`, monthly only), `summary` (true/false, daily only), `dryRun` (true = only log the report, don't post to Slack).
+
+The function uses its own IAM role (`ce:GetCostAndUsage`, `iam:ListAccountAliases`), so no access keys are stored. Each run makes 1–2 Cost Explorer requests (about $0.01 each), roughly $0.35–0.70 a month.
+
 ## Note
 
 Regarding the credentials, you need to have the following permissions in order to use the CLI:

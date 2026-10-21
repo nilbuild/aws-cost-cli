@@ -118,3 +118,7 @@ dist
 
 # Compiled code
 dist/
+dist-lambda
+lambda.zip
+.aws-sam
+packaged.yaml

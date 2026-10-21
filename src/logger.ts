@@ -16,6 +16,11 @@ let spinner: Ora | undefined;
  * @param text Text to show in the spinner
  */
 export function showSpinner(text: string) {
+  // No spinner when there is no terminal (e.g. on AWS Lambda)
+  if (!process.stderr.isTTY) {
+    return;
+  }
+
   if (!spinner) {
     spinner = ora({ text: '' }).start();
   }

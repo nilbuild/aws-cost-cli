@@ -1,0 +1,101 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: AWS cost reports to Slack - a daily report and a monthly text report, run on Lambda.
+
+Parameters:
+  DailySchedule:
+    Type: String
+    Default: cron(0 9 * * ? *)
+    Description: When the daily report runs. cron(minutes hours day-of-month month day-of-week year). Default every day 09:00.
+  MonthlySchedule:
+    Type: String
+    Default: cron(0 9 1 * ? *)
+    Description: When the monthly report (for the month that just ended) runs. Default the 1st of every month 09:00.
+  ScheduleTimezone:
+    Type: String
+    Default: UTC
+    Description: Timezone the schedules above use, e.g. UTC, Asia/Kolkata, America/Los_Angeles.
+  DailyScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+  MonthlyScheduleState:
+    Type: String
+    Default: ENABLED
+    AllowedValues: [ENABLED, DISABLED]
+  SlackToken:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Slack bot token (xoxb-...) with the chat:write scope. Leave empty if you use SlackWebhookUrl.
+  SlackChannel:
+    Type: String
+    Default: ''
+    Description: Slack channel name or ID the bot posts to (invite the bot to it first).
+  SlackWebhookUrl:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Slack incoming webhook URL. Alternative to SlackToken + SlackChannel.
+  AccountName:
+    Type: String
+    Default: ''
+    Description: Optional label shown in the reports. Empty = IAM account alias, or the account ID.
+  SummaryOnly:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: true = daily report shows totals only, without the per-service breakdown.
+
+Resources:
+  CostReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Sends AWS daily and monthly cost reports to Slack
+      CodeUri: dist-lambda/
+      Handler: index.handler
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      MemorySize: 256
+      Timeout: 120
+      Environment:
+        Variables:
+          SLACK_TOKEN: !Ref SlackToken
+          SLACK_CHANNEL: !Ref SlackChannel
+          SLACK_WEBHOOK_URL: !Ref SlackWebhookUrl
+          ACCOUNT_NAME: !Ref AccountName
+          SUMMARY_ONLY: !Ref SummaryOnly
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ce:GetCostAndUsage
+                - iam:ListAccountAliases
+              Resource: '*'
+      Events:
+        DailyReport:
+          Type: ScheduleV2
+          Properties:
+            Description: Daily AWS cost report
+            ScheduleExpression: !Ref DailySchedule
+            ScheduleExpressionTimezone: !Ref ScheduleTimezone
+            State: !Ref DailyScheduleState
+            Input: '{"reportType": "daily"}'
+        MonthlyReport:
+          Type: ScheduleV2
+          Properties:
+            Description: Monthly AWS cost report for the previous month
+            ScheduleExpression: !Ref MonthlySchedule
+            ScheduleExpressionTimezone: !Ref ScheduleTimezone
+            State: !Ref MonthlyScheduleState
+            Input: '{"reportType": "monthly"}'
+
+  CostReportLogs:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CostReportFunction}
+      RetentionInDays: 30
+
+Outputs:
+  FunctionName:
+    Value: !Ref CostReportFunction

@@ -10,7 +10,8 @@ export type EnvConfig = {
 };
 
 export type AWSConfig = {
-  credentials: {
+  // Left out on Lambda, so the SDK uses the function's IAM role
+  credentials?: {
     accessKeyId: string;
     secretAccessKey: string;
     sessionToken: string;
